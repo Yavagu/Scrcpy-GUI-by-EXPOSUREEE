@@ -157,7 +157,7 @@ Sheet {
             }
             DeckButton {
                 text: "Releases on GitHub"; glyph: "globe"
-                onClicked: Qt.openUrlExternally("https://github.com/Yavagu/Scrcpy-GUI-by-EXPOSUREEE/releases")
+                onClicked: Qt.openUrlExternally("https://github.com/EXPOSUREEE/Scrcpy-GUI-by-EXPOSUREEE/releases")
             }
         }
 

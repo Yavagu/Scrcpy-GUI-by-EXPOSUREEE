@@ -21,6 +21,14 @@ from release_catalog import (
 
 GITHUB_REPO = DECK_REPO
 RELEASES_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases"
+
+
+def portable_release_page():
+    """Portable application updates are downloaded from the release page."""
+    from assets import has_portable_marker
+    if has_portable_marker():
+        return f"https://github.com/{GITHUB_REPO}/releases/latest"
+    return None
 VERSION_PREFS_FILE = "version_preferences.json"
 
 
@@ -231,12 +239,8 @@ def download_installer(url, target_path, on_progress=None, cancel_event=None, ti
 def backup_user_settings(profile_dir: Path = None) -> Path | None:
     """Create a timestamped backup of the user configuration before update/downgrade."""
     if profile_dir is None:
-        from PySide6.QtCore import QStandardPaths
-        p_str = os.environ.get("SCRCPY_DECK_PROFILE_DIR")
-        if p_str:
-            profile_dir = Path(p_str)
-        else:
-            profile_dir = Path(QStandardPaths.writableLocation(QStandardPaths.AppLocalDataLocation))
+        from assets import get_profile_dir
+        profile_dir = get_profile_dir()
 
     config_file = profile_dir / "config.json"
     if not config_file.is_file():
@@ -256,12 +260,8 @@ def backup_user_settings(profile_dir: Path = None) -> Path | None:
 def get_version_preferences(profile_dir: Path = None) -> dict:
     """Load user version manager preferences (pins, dismissed notifications, etc.)."""
     if profile_dir is None:
-        from PySide6.QtCore import QStandardPaths
-        p_str = os.environ.get("SCRCPY_DECK_PROFILE_DIR")
-        if p_str:
-            profile_dir = Path(p_str)
-        else:
-            profile_dir = Path(QStandardPaths.writableLocation(QStandardPaths.AppLocalDataLocation))
+        from assets import get_profile_dir
+        profile_dir = get_profile_dir()
     defaults = {
         "deck_pinning": "follow_latest",
         "scrcpy_pinning": "follow_latest",
@@ -286,12 +286,8 @@ def get_version_preferences(profile_dir: Path = None) -> dict:
 def set_version_preference(key: str, val, profile_dir: Path = None):
     """Persist a single version preference atomically."""
     if profile_dir is None:
-        from PySide6.QtCore import QStandardPaths
-        p_str = os.environ.get("SCRCPY_DECK_PROFILE_DIR")
-        if p_str:
-            profile_dir = Path(p_str)
-        else:
-            profile_dir = Path(QStandardPaths.writableLocation(QStandardPaths.AppLocalDataLocation))
+        from assets import get_profile_dir
+        profile_dir = get_profile_dir()
     prefs = get_version_preferences(profile_dir)
     prefs[key] = val
     try:
@@ -425,6 +421,8 @@ exit 0
 
 def launch_installer_and_restart(installer_path, target_exe=None, pid=None):
     """Launch the installer runner detached and completely hidden so no CMD/PowerShell window opens."""
+    if portable_release_page():
+        raise RuntimeError("Download the portable ZIP from the Scrcpy Deck release page.")
     proc_pid = int(pid) if pid is not None else os.getpid()
     runner_vbs = create_update_runner_script(installer_path, target_exe, pid=proc_pid)
     runner_bat = runner_vbs.parent / "scrcpy_deck_update_runner.bat"

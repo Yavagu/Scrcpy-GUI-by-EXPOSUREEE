@@ -186,7 +186,7 @@ ApplicationWindow {
                     DeckButton {
                         visible: deck.state.updateStatus !== "downloading"
                         primary: true; compact: true
-                        text: "Install Update"
+                        text: deck.state.portable ? "Download portable ZIP" : "Install Update"
                         onClicked: deck.installUpdate()
                     }
                     DeckButton {
@@ -469,7 +469,7 @@ ApplicationWindow {
                 DeckButton {
                     visible: deck.state.updateStatus !== "downloading" && deck.state.updateStatus !== "installing"
                     primary: true
-                    text: "Install Update"
+                    text: deck.state.portable ? "Download portable ZIP" : "Install Update"
                     onClicked: deck.installUpdate()
                 }
             }

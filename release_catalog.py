@@ -10,7 +10,7 @@ import time
 import urllib.error
 import urllib.request
 
-DECK_REPO = "Yavagu/Scrcpy-GUI-by-EXPOSUREEE"
+DECK_REPO = "EXPOSUREEE/Scrcpy-GUI-by-EXPOSUREEE"
 SCRCPY_REPO = "Genymobile/scrcpy"
 CACHE_TTL_SECONDS = 3600  # 1 hour cache validity
 CACHE_FILE: Path | None = None

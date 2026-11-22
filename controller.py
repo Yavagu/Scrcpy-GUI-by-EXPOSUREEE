@@ -14,11 +14,20 @@ from threading import Event, Lock, Thread
 import urllib.request
 import uuid
 
-from PySide6.QtCore import QObject, Property, QStandardPaths, QTimer, Signal, Slot, Qt
-from PySide6.QtGui import QGuiApplication
+from PySide6.QtCore import QObject, Property, QStandardPaths, QTimer, QUrl, Signal, Slot, Qt
+from PySide6.QtGui import QDesktopServices, QGuiApplication
 
 from adb import AdbManager, DeviceError, HIDDEN
-from assets import APP_DIR, RESOURCES, VERSION, child_environment, executable, get_writable_runtime
+from assets import (
+    APP_DIR,
+    RESOURCES,
+    VERSION,
+    child_environment,
+    executable,
+    get_profile_dir,
+    get_writable_runtime,
+    portable_profile_dir,
+)
 from config import DEFAULTS, SettingsStore, normalize
 from console import ConsoleModel, infer_fix_hint
 from library import address, endpoint, merge_devices
@@ -59,6 +68,7 @@ from updater import (
     get_target_executable,
     get_version_preferences,
     launch_installer_and_restart,
+    portable_release_page,
     set_version_preference,
 )
 from workflows import Connections
@@ -161,6 +171,13 @@ def _installed_scrcpy_runtime(version):
     return None
 
 
+def _scrcpy_download_dir():
+    portable = portable_profile_dir()
+    if portable is not None:
+        return portable / "downloads"
+    return Path(tempfile.gettempdir()) / "ScrcpyDeckUpdate"
+
+
 class Deck(QObject):
     stateChanged = Signal()
     settingsChanged = Signal()
@@ -186,7 +203,7 @@ class Deck(QObject):
     def __init__(self, profile=None, app_dir=APP_DIR):
         super().__init__()
         self.app_dir = Path(app_dir)
-        profile = profile or Path(QStandardPaths.writableLocation(QStandardPaths.AppLocalDataLocation)) / "config.json"
+        profile = profile or get_profile_dir() / "config.json"
         self._profile_dir = Path(profile).parent
         self.store = SettingsStore(profile, self.app_dir / "config.json")
         self.logs = ConsoleModel()
@@ -260,6 +277,7 @@ class Deck(QObject):
 
         self._state = dict(
             status="Ready", error="", busy=False, devices=[], serial="",
+            portable=bool(portable_release_page()),
             tcpSerial="", port="", lenses=["Default"], recovering=False,
             update="", updateStatus="", updateProgress=0, updateError="",
             updateSize=0, sessions=0,
@@ -624,7 +642,9 @@ class Deck(QObject):
             )
             cwd = self.app_dir
             if "--record" in cmd:
-                cwd = Path(QStandardPaths.writableLocation(QStandardPaths.MoviesLocation)) / "Scrcpy Deck"
+                portable = portable_profile_dir()
+                cwd = (portable / "recordings" if portable is not None else
+                       Path(QStandardPaths.writableLocation(QStandardPaths.MoviesLocation)) / "Scrcpy Deck")
                 cwd.mkdir(parents=True, exist_ok=True)
                 self.logs.log("INFO", f"Recording to {cwd / cmd[cmd.index('--record') + 1]}")
             self.runner.start(cmd, cwd, debug=s["debug_mode"])
@@ -858,9 +878,17 @@ class Deck(QObject):
 
         Thread(target=check, daemon=True).start()
 
+    def _open_portable_release(self):
+        url = portable_release_page()
+        if not url:
+            return False
+        if not QDesktopServices.openUrl(QUrl(url)):
+            self._change(updateStatus="error", updateError=f"Download the portable ZIP from {url}")
+        return True
+
     @Slot()
     def installUpdate(self):
-        if self._closed or not self._update_info:
+        if self._closed or self._open_portable_release() or not self._update_info:
             return
         if self._state.get("updateStatus") in ("downloading", "installing"):
             return
@@ -1061,7 +1089,7 @@ class Deck(QObject):
 
         def run_update():
             try:
-                temp_dir = Path(tempfile.gettempdir()) / "ScrcpyDeckUpdate"
+                temp_dir = _scrcpy_download_dir()
                 temp_dir.mkdir(parents=True, exist_ok=True)
                 zip_name = info.get("asset_name") or "scrcpy.zip"
                 zip_path = temp_dir / zip_name
@@ -1399,7 +1427,10 @@ class Deck(QObject):
 
         act = sel_deck_info.get("action", "install")
         ver = sel_deck_info["version"]
-        if act == "upgrade":
+        if portable_release_page():
+            sel_deck_info.update(action="download", size_str="", is_compatible=True)
+            deck_act_text = "Download portable ZIP"
+        elif act == "upgrade":
             deck_act_text = f"Upgrade to v{ver}"
         elif act == "downgrade":
             deck_act_text = f"Downgrade to v{ver}"
@@ -1569,7 +1600,7 @@ class Deck(QObject):
     @Slot()
     @Slot(bool)
     def installSelectedDeck(self, confirmed_downgrade=False):
-        if self._closed:
+        if self._closed or self._open_portable_release():
             return
         info = self._selected_deck_release or self._update_info
         if not info:
@@ -1708,7 +1739,7 @@ class Deck(QObject):
 
         def run_scrcpy_fetch():
             try:
-                temp_dir = Path(tempfile.gettempdir()) / "ScrcpyDeckUpdate"
+                temp_dir = _scrcpy_download_dir()
                 temp_dir.mkdir(parents=True, exist_ok=True)
                 zip_path = temp_dir / asset_name
 
